@@ -1,32 +1,21 @@
-# React + TypeScript + Vite
+# Canvas playground
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A pixel canvas for prototyping image-generation math: draw pixel by pixel, then see exactly what the canvas holds and what every export format makes of it.
 
-Currently, two official plugins are available:
+**Live demo:** https://rah-emil.github.io/canvas-playground-debugger/
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+![Canvas playground poster: the drawing interface, canvas info with colors, and a per-format comparison of file size and color count](docs/poster.png)
 
-## React Compiler
+- **Draw & set up** — brush color, size and shape; 72p–4K canvases in 6 aspect ratios.
+- **Import** — images (original size, fit, fill or stretch) and canvas JSON.
+- **Inspect** — painted pixels, unique colors and rgba values.
+- **Compare formats** — file size and color count for PNG, JPG, WEBP, AVIF, SVG, RLE JSON and Delta+RLE JSON, with a compression-level slider.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Run
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+pnpm install
+pnpm dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+`pnpm test` runs unit tests, `pnpm test:e2e` browser tests (needs Google Chrome), `pnpm poster` regenerates the poster above.
