@@ -60,7 +60,7 @@ export function analyze(buf: PixelBuffer): CanvasStats {
   }
 }
 
-/** Закрашенные пиксели в порядке построчного обхода (не больше limit). */
+/** Painted pixels in row-by-row order (at most `limit`). */
 export function listPixels(buf: PixelBuffer, limit: number): PixelInfo[] {
   const { width, height, data32 } = buf
   const out: PixelInfo[] = []
@@ -77,8 +77,8 @@ export function listPixels(buf: PixelBuffer, limit: number): PixelInfo[] {
 }
 
 /**
- * Полное состояние холста в компактном виде:
- * rows[y] = [[x, длина, индекс в palette], ...] — горизонтальные серии одного цвета.
+ * Full canvas state in compact form:
+ * rows[y] = [[x, length, palette index], ...] — horizontal runs of one color.
  */
 export function stateToJson(buf: PixelBuffer): string {
   const { width, height, data32 } = buf

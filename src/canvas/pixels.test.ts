@@ -139,7 +139,7 @@ describe('resample', () => {
 
   it('scales painted regions proportionally (up and down)', () => {
     const buf = createBuffer(4, 4)
-    strokeLine(buf, 0, 0, 1, 1, brush(1)) // верхний левый квадрант: (0,0) и (1,1)
+    strokeLine(buf, 0, 0, 1, 1, brush(1)) // top-left quadrant: (0,0) and (1,1)
     const up = resample(buf, 8, 8)
     expect(up.width).toBe(8)
     expect(up.data32[0]).toBe(RED)

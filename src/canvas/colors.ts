@@ -1,6 +1,6 @@
 /**
- * Число уникальных цветов в RGBA-данных. Полностью прозрачные пиксели не считаются
- * (у холста «пусто» — это не цвет); полупрозрачные считаются отдельными цветами по RGBA.
+ * Number of unique colors in RGBA data. Fully transparent pixels are not counted
+ * (an "empty" canvas pixel is not a color); semi-transparent ones count as separate RGBA colors.
  */
 export function countColors(rgba: Uint8ClampedArray): number {
   const px = new Uint32Array(rgba.buffer, rgba.byteOffset, rgba.byteLength >> 2)
@@ -8,7 +8,7 @@ export function countColors(rgba: Uint8ClampedArray): number {
   let prev = -1
   for (let i = 0; i < px.length; i++) {
     const v = px[i]
-    // Подряд идущие одинаковые пиксели (заливки) пропускаем без обращения к Set.
+    // Consecutive identical pixels (fills) are skipped without touching the Set.
     if (v === prev) continue
     prev = v
     if (v >>> 24 !== 0) seen.add(v)
@@ -16,9 +16,9 @@ export function countColors(rgba: Uint8ClampedArray): number {
   return seen.size
 }
 
-/** Декодирует готовый файл (png/jpg/webp/avif) обратно в пиксели и считает в нём цвета. */
+/** Decodes a finished file (png/jpg/webp/avif) back into pixels and counts its colors. */
 export async function countBlobColors(blob: Blob): Promise<number> {
-  // Без цветокоррекции и предумножения альфы: нужны значения, которые лежат в файле.
+  // No color management or alpha premultiplication: we want the values stored in the file.
   const bitmap = await createImageBitmap(blob, {
     premultiplyAlpha: 'none',
     colorSpaceConversion: 'none',

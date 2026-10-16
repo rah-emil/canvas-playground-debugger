@@ -4,19 +4,19 @@ import { createBuffer, type PixelBuffer, type Rect } from './pixels'
 export type FitMode = 'original' | 'contain' | 'cover' | 'stretch'
 
 export const FIT_MODES: readonly { value: FitMode; label: string }[] = [
-  { value: 'original', label: 'Оригинал (пиксель в пиксель)' },
-  { value: 'contain', label: 'Вписать' },
-  { value: 'cover', label: 'Заполнить (обрезать)' },
-  { value: 'stretch', label: 'Растянуть' },
+  { value: 'original', label: 'Original (pixel for pixel)' },
+  { value: 'contain', label: 'Fit' },
+  { value: 'cover', label: 'Fill (crop)' },
+  { value: 'stretch', label: 'Stretch' },
 ]
 
 export interface ImportOptions {
   fit: FitMode
-  /** Сглаживание при масштабировании; для пиксель-арта лучше выключить. В режиме «original» не нужно. */
+  /** Smoothing when scaling; better turned off for pixel art. Not needed in "original" mode. */
   smooth: boolean
 }
 
-/** Куда рисовать картинку srcW×srcH на холсте dstW×dstH (целые координаты). */
+/** Where to draw a srcW×srcH image on a dstW×dstH canvas (integer coordinates). */
 export function fitRect(
   srcW: number,
   srcH: number,
@@ -25,7 +25,7 @@ export function fitRect(
   mode: FitMode,
 ): Rect {
   if (mode === 'stretch') return { x: 0, y: 0, w: dstW, h: dstH }
-  // Без масштабирования: по центру; если картинка больше холста, обрезается симметрично.
+  // No scaling: centered; an image larger than the canvas is cropped symmetrically.
   if (mode === 'original') {
     return {
       x: Math.floor((dstW - srcW) / 2),
@@ -41,7 +41,7 @@ export function fitRect(
   return { x: Math.round((dstW - w) / 2), y: Math.round((dstH - h) / 2), w, h }
 }
 
-/** Ближайшее по пропорциям соотношение сторон из списка (по логарифму отношения). */
+/** The closest aspect ratio from the list (by the logarithm of the ratio). */
 export function closestRatio(srcW: number, srcH: number, ratios: readonly Ratio[]): Ratio {
   const target = Math.log(srcW / srcH)
   return ratios.reduce((best, r) =>
@@ -52,8 +52,8 @@ export function closestRatio(srcW: number, srcH: number, ratios: readonly Ratio[
 }
 
 /**
- * Переносит RGBA в буфер холста. Пиксель либо закрашен (alpha >= 128, становится непрозрачным),
- * либо пуст: полупрозрачность холст не хранит.
+ * Copies RGBA into a canvas buffer. A pixel is either painted (alpha >= 128, becomes opaque)
+ * or empty: the canvas does not store semi-transparency.
  */
 export function rgbaToBuffer(rgba: Uint8ClampedArray, width: number, height: number): PixelBuffer {
   const buf = createBuffer(width, height)
@@ -68,7 +68,7 @@ export function rgbaToBuffer(rgba: Uint8ClampedArray, width: number, height: num
   return buf
 }
 
-/** Переносит готовый буфер на холст другого размера: по центру, без масштабирования, лишнее обрезается. */
+/** Places a finished buffer onto a canvas of another size: centered, without scaling, the excess is cropped. */
 export function placeCentered(src: PixelBuffer, width: number, height: number): PixelBuffer {
   const dst = createBuffer(width, height)
   const r = fitRect(src.width, src.height, width, height, 'original')
@@ -91,7 +91,7 @@ async function loadImage(file: Blob): Promise<HTMLImageElement> {
     await img.decode()
     return img
   } catch {
-    throw new Error('Не удалось прочитать файл как изображение')
+    throw new Error('Could not read the file as an image')
   } finally {
     URL.revokeObjectURL(url)
   }

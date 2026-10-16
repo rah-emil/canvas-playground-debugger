@@ -1,9 +1,9 @@
-# Проверки и публикация статичного билда в GitHub Pages.
+# Checks and publishing of the static build to GitHub Pages.
 #
-# - pull request в master: lint, unit-тесты, e2e в Chrome и сборка (без публикации);
-# - push в master / ручной запуск: то же самое, и если всё зелёное — деплой на Pages.
+# - pull request to master: lint, unit tests, e2e in Chrome and a build (no publishing);
+# - push to master / manual run: the same, and if everything is green, a deploy to Pages.
 #
-# Один раз в репозитории: Settings → Pages → Build and deployment → Source: «GitHub Actions».
+# Once per repository: Settings → Pages → Build and deployment → Source: "GitHub Actions".
 name: CI and deploy to GitHub Pages
 
 on:
@@ -11,10 +11,10 @@ on:
     branches: ["master"]
   pull_request:
     branches: ["master"]
-  # Позволяет запустить воркфлоу вручную из вкладки Actions
+  # Allows running the workflow manually from the Actions tab
   workflow_dispatch:
 
-# По умолчанию токену достаточно читать код; нужные права выдаются конкретным job'ам ниже.
+# By default the token may only read code; the needed permissions are granted to specific jobs below.
 permissions:
   contents: read
 
@@ -60,8 +60,8 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # Playwright использует установленный на раннере Google Chrome (channel: 'chrome'),
-      # браузеры скачивать не нужно.
+      # Playwright uses the Google Chrome installed on the runner (channel: 'chrome'),
+      # so no browsers need to be downloaded.
       - name: E2E tests
         run: pnpm test:e2e
       - name: Upload Playwright report
@@ -95,12 +95,12 @@ jobs:
           node-version: 24
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # base_path: «/<имя-репозитория>» для project-сайта или пусто для своего домена / user-сайта.
+      # base_path: "/<repository-name>" for a project site, or empty for a custom domain / user site.
       - name: Setup Pages
         id: pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v6
-      # `pnpm build` = tsc -b (проверка типов) + vite build. BASE_PATH читает vite.config.ts.
+      # `pnpm build` = tsc -b (type check) + vite build. BASE_PATH is read by vite.config.ts.
       - name: Build
         run: pnpm build
         env:
@@ -113,7 +113,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    # Публикуем только после зелёных проверок и только не из pull request'а.
+    # Publish only after green checks and never from a pull request.
     if: github.event_name != 'pull_request'
     needs: [test, e2e, build]
     runs-on: ubuntu-latest
@@ -123,7 +123,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    # Одновременно идёт только один деплой; уже запущенный не отменяем, чтобы он дошёл до конца.
+    # Only one deploy runs at a time; one already in progress is not cancelled so that it can finish.
     concurrency:
       group: "pages"
       cancel-in-progress: false

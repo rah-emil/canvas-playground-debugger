@@ -2,7 +2,7 @@ export interface PixelBuffer {
   width: number
   height: number
   image: ImageData
-  /** Тот же буфер, что и image.data, но по одному пикселю на элемент (ABGR, little-endian). */
+  /** The same buffer as image.data, but one pixel per element (ABGR, little-endian). */
   data32: Uint32Array
 }
 
@@ -26,7 +26,7 @@ export function createBuffer(width: number, height: number): PixelBuffer {
   return { width, height, image, data32: new Uint32Array(image.data.buffer) }
 }
 
-/** '#rrggbb' -> упакованный непрозрачный ABGR. */
+/** '#rrggbb' -> packed opaque ABGR. */
 export function packColor(hex: string): number {
   const n = parseInt(hex.slice(1), 16)
   const r = (n >> 16) & 255
@@ -44,7 +44,7 @@ export function toHex(v: number): string {
   return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')
 }
 
-/** Пересчёт в новое разрешение (nearest neighbour): рисунок растягивается вместе с холстом. */
+/** Resamples to a new size (nearest neighbour): the drawing is stretched together with the canvas. */
 export function resample(src: PixelBuffer, width: number, height: number): PixelBuffer {
   if (src.width === width && src.height === height) return src
   const dst = createBuffer(width, height)
@@ -60,7 +60,7 @@ export function resample(src: PixelBuffer, width: number, height: number): Pixel
 
 const maskCache = new Map<string, Int32Array>()
 
-/** Смещения (dx, dy) пикселей кисти относительно центра. */
+/** Offsets (dx, dy) of the brush pixels relative to its center. */
 function brushMask(size: number, shape: BrushShape): Int32Array {
   const key = `${shape}:${size}`
   const cached = maskCache.get(key)
@@ -90,7 +90,7 @@ function stamp(buf: PixelBuffer, cx: number, cy: number, brush: Brush, mask: Int
   }
 }
 
-/** Линия Брезенхэма штампами кисти. Возвращает изменённую область (для частичной перерисовки). */
+/** Bresenham line drawn with brush stamps. Returns the changed area (for partial redraws). */
 export function strokeLine(
   buf: PixelBuffer,
   x0: number,

@@ -3,12 +3,12 @@ import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // На GitHub Pages сайт живёт по адресу /<репозиторий>/, путь приходит из CI (см. .github/workflows).
+  // On GitHub Pages the site lives at /<repository>/; the path comes from CI (see .github/workflows).
   base: process.env.BASE_PATH || '/',
   plugins: [react()],
-  // WASM-кодировщик AVIF сам находит свой .wasm относительно модуля — прекомпиляция Vite это ломает.
+  // The AVIF WASM encoder locates its .wasm relative to its own module — Vite's pre-bundling breaks that.
   optimizeDeps: { exclude: ['@jsquash/avif'] },
-  // В воркере есть динамический import (wasm-glue), а он требует es-формата.
+  // The worker has a dynamic import (the wasm glue), which requires the es format.
   worker: { format: 'es' },
   test: {
     environment: 'node',

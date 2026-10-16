@@ -3,7 +3,7 @@ import { toSvg } from './export'
 import { createBuffer, packColor, strokeLine, toHex } from './pixels'
 import { listPixels } from './stats'
 
-/** Разбор нашего SVG обратно в карту пикселей. */
+/** Parses our SVG back into a pixel map. */
 function rasterize(svg: string): Map<string, string> {
   const out = new Map<string, string>()
   for (const [, fill, d] of svg.matchAll(/<path fill="(#[0-9a-f]{6})" d="([^"]*)"/g)) {
@@ -34,8 +34,8 @@ describe('toSvg', () => {
   it('does not merge rows that differ in x, width or color', () => {
     const buf = createBuffer(6, 3)
     buf.data32[0] = packColor('#111111')
-    buf.data32[1 * 6 + 1] = packColor('#111111') // другой x
-    buf.data32[2 * 6 + 1] = packColor('#222222') // тот же x, другой цвет
+    buf.data32[1 * 6 + 1] = packColor('#111111') // a different x
+    buf.data32[2 * 6 + 1] = packColor('#222222') // the same x, a different color
     const rects = [...toSvg(buf).matchAll(/M\d+ \d+h/g)]
     expect(rects).toHaveLength(3)
   })

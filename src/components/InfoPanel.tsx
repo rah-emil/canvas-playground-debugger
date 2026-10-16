@@ -1,94 +1,52 @@
 import { useMemo } from 'react'
-import { downloadBlob } from '../canvas/export'
-import {
-  JSON_EXPORT_FORMATS,
-  jsonExportFilename,
-  type CanvasJsonFormat,
-} from '../canvas/formats'
 import type { PixelBuffer } from '../canvas/pixels'
 import { analyze, listPixels } from '../canvas/stats'
-import { ExportSizes } from './ExportSizes'
 
 const PIXEL_LIMIT = 500
 const COLOR_LIMIT = 200
 
 interface Props {
   buffer: PixelBuffer
-  format: CanvasJsonFormat
-  onFormatChange: (format: CanvasJsonFormat) => void
 }
 
-// Буфер мутируется на месте, поэтому родитель перемонтирует панель (key) после каждого штриха.
-// Поэтому выбранный формат хранится у родителя, а не здесь.
-export function InfoPanel({ buffer, format, onFormatChange }: Props) {
+// The buffer is mutated in place, so the parent remounts the panel (key) after every stroke.
+export function InfoPanel({ buffer }: Props) {
   const stats = useMemo(() => analyze(buffer), [buffer])
   const pixels = useMemo(() => listPixels(buffer, PIXEL_LIMIT), [buffer])
 
-  const download = () => {
-    const selected = JSON_EXPORT_FORMATS.find((f) => f.id === format) ?? JSON_EXPORT_FORMATS[0]
-    downloadBlob(
-      new Blob([selected.serialize(buffer)], { type: 'application/json' }),
-      jsonExportFilename(selected, buffer),
-    )
-  }
-
   return (
-    <section className="info">
-      <div className="info-head">
-        <h2>Состояние холста</h2>
-        <div className="info-actions">
-          <select
-            aria-label="Формат экспорта"
-            value={format}
-            onChange={(e) => onFormatChange(e.target.value as CanvasJsonFormat)}
-          >
-            {JSON_EXPORT_FORMATS.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
-          </select>
-          <div className="seg">
-            <button type="button" onClick={download}>
-              Скачать
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="info">
       <dl className="summary">
-        <dt>Размер</dt>
+        <dt>Size</dt>
         <dd>
-          {stats.width}×{stats.height} ({stats.total.toLocaleString('ru')} px)
+          {stats.width}×{stats.height} ({stats.total.toLocaleString('en-US')} px)
         </dd>
-        <dt>Закрашено</dt>
+        <dt>Painted</dt>
         <dd>
-          {stats.painted.toLocaleString('ru')} px ({(stats.coverage * 100).toFixed(2)}%)
+          {stats.painted.toLocaleString('en-US')} px ({(stats.coverage * 100).toFixed(2)}%)
         </dd>
-        <dt>Пустых</dt>
-        <dd>{(stats.total - stats.painted).toLocaleString('ru')} px</dd>
-        <dt>Рамка рисунка</dt>
+        <dt>Empty</dt>
+        <dd>{(stats.total - stats.painted).toLocaleString('en-US')} px</dd>
+        <dt>Bounding box</dt>
         <dd>
           {stats.bbox
             ? `x ${stats.bbox.minX}…${stats.bbox.maxX}, y ${stats.bbox.minY}…${stats.bbox.maxY}`
             : '—'}
         </dd>
-        <dt>Уникальных цветов</dt>
+        <dt>Unique colors</dt>
         <dd>{stats.colors.length}</dd>
       </dl>
 
-      <ExportSizes buffer={buffer} canvasColors={stats.colors.length} />
-
       <div className="tables">
         <div>
-          <h3>Цвета</h3>
+          <h3>Colors</h3>
           <div className="scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Цвет</th>
-                  <th>Пикселей</th>
-                  <th>Доля</th>
+                  <th>Color</th>
+                  <th>Pixels</th>
+                  <th>Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -98,7 +56,7 @@ export function InfoPanel({ buffer, format, onFormatChange }: Props) {
                       <i className="swatch" style={{ background: c.hex }} />
                       <code>{c.hex}</code>
                     </td>
-                    <td>{c.count.toLocaleString('ru')}</td>
+                    <td>{c.count.toLocaleString('en-US')}</td>
                     <td>{((c.count / stats.painted) * 100).toFixed(1)}%</td>
                   </tr>
                 ))}
@@ -107,20 +65,20 @@ export function InfoPanel({ buffer, format, onFormatChange }: Props) {
           </div>
           {stats.colors.length > COLOR_LIMIT && (
             <p className="hint">
-              Показаны первые {COLOR_LIMIT} из {stats.colors.length}.
+              Showing the first {COLOR_LIMIT} of {stats.colors.length}.
             </p>
           )}
         </div>
 
         <div>
-          <h3>Пиксели (rgba)</h3>
+          <h3>Pixels (rgba)</h3>
           <div className="scroll">
             <table>
               <thead>
                 <tr>
                   <th>x</th>
                   <th>y</th>
-                  <th>Цвет</th>
+                  <th>Color</th>
                   <th>r</th>
                   <th>g</th>
                   <th>b</th>
@@ -147,13 +105,13 @@ export function InfoPanel({ buffer, format, onFormatChange }: Props) {
           </div>
           <p className="hint">
             {stats.painted > PIXEL_LIMIT
-              ? `Показаны первые ${PIXEL_LIMIT} из ${stats.painted.toLocaleString('ru')} (построчно). Полный список — в JSON.`
+              ? `Showing the first ${PIXEL_LIMIT} of ${stats.painted.toLocaleString('en-US')} (row by row). The full list is in the JSON.`
               : stats.painted === 0
-                ? 'Холст пуст.'
-                : 'Показаны все закрашенные пиксели.'}
+                ? 'The canvas is empty.'
+                : 'Showing all painted pixels.'}
           </p>
         </div>
       </div>
-    </section>
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 import { toHex, type PixelBuffer } from './pixels'
+import { DEFAULT_LOSSY_QUALITY } from './quality'
 
 export type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg'
 
@@ -15,7 +16,7 @@ function drawToCanvas(buf: PixelBuffer, background?: string): HTMLCanvasElement 
   source.getContext('2d')!.putImageData(buf.image, 0, 0)
   if (!background) return source
 
-  // JPG не поддерживает прозрачность — подкладываем фон.
+  // JPG has no transparency — put a background underneath.
   const flat = document.createElement('canvas')
   flat.width = buf.width
   flat.height = buf.height
@@ -26,23 +27,28 @@ function drawToCanvas(buf: PixelBuffer, background?: string): HTMLCanvasElement 
   return flat
 }
 
-function toRasterBlob(buf: PixelBuffer, format: 'png' | 'jpg' | 'webp'): Promise<Blob> {
+function toRasterBlob(
+  buf: PixelBuffer,
+  format: 'png' | 'jpg' | 'webp',
+  quality: number,
+): Promise<Blob> {
   const mime = MIME[format]
   const canvas = drawToCanvas(buf, format === 'jpg' ? '#ffffff' : undefined)
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
-        // Браузер молча отдаёт PNG, если не умеет кодировать нужный формат.
-        if (!blob || blob.type !== mime) reject(new Error(`Браузер не поддерживает экспорт в ${format}`))
+        // The browser silently returns PNG when it cannot encode the requested format.
+        if (!blob || blob.type !== mime) reject(new Error(`The browser does not support exporting to ${format}`))
         else resolve(blob)
       },
       mime,
-      format === 'png' ? undefined : 0.95,
+      // PNG has no quality setting; for JPG/WEBP canvas.toBlob takes a number from 0 to 1.
+      format === 'png' ? undefined : quality / 100,
     )
   })
 }
 
-/** Векторизация: одинаковые горизонтальные серии склеиваются по вертикали, один <path> на цвет. */
+/** Vectorization: identical horizontal runs are merged vertically, one <path> per color. */
 export function toSvg(buf: PixelBuffer): string {
   const { width, height, data32 } = buf
   interface Rect {
@@ -94,9 +100,14 @@ export function toSvg(buf: PixelBuffer): string {
   )
 }
 
-export async function exportBlob(buf: PixelBuffer, format: ExportFormat): Promise<Blob> {
+/** `quality` (1…100) only affects JPG and WEBP. */
+export async function exportBlob(
+  buf: PixelBuffer,
+  format: ExportFormat,
+  quality: number = DEFAULT_LOSSY_QUALITY,
+): Promise<Blob> {
   if (format === 'svg') return new Blob([toSvg(buf)], { type: 'image/svg+xml' })
-  return toRasterBlob(buf, format)
+  return toRasterBlob(buf, format, quality)
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

@@ -16,7 +16,7 @@ function drawing(width: number, height: number) {
 }
 
 describe('AVIF size estimation', () => {
-  // В браузере кодировщик сам грузит .wasm; в node нет fetch для file:// — отдаём готовый модуль.
+  // In a browser the encoder loads its .wasm itself; node has no fetch for file:// — hand it a ready module.
   beforeAll(async () => {
     const wasm = await readFile(
       new URL('../../node_modules/@jsquash/avif/codec/enc/avif_enc.wasm', import.meta.url),
@@ -38,6 +38,23 @@ describe('AVIF size estimation', () => {
     expect(buf.data32.length).toBe(32 * 18)
     expect(buf.data32).toEqual(before)
   }, 30_000)
+
+  it('a lower quality gives a smaller file, a higher one a larger file', async () => {
+    // A gradient with noise: for flat-colored drawings the size barely depends on quality.
+    const buf = createBuffer(96, 64)
+    let seed = 7
+    for (let y = 0; y < 64; y++)
+      for (let x = 0; x < 96; x++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff
+        buf.data32[y * 96 + x] = packColor(
+          `#${(x * 2).toString(16).padStart(2, '0')}${(y * 3).toString(16).padStart(2, '0')}${((seed >> 8) & 255).toString(16).padStart(2, '0')}`,
+        )
+      }
+    const size = async (q: number) => (await encodeAvif(toRawImage(buf), q)).byteLength
+    const [low, mid, high] = [await size(10), await size(60), await size(95)]
+    expect(low).toBeLessThan(mid)
+    expect(mid).toBeLessThan(high)
+  }, 60_000)
 
   it('an empty canvas is tiny, a busy one is larger', async () => {
     const empty = (await encodeAvif(toRawImage(createBuffer(128, 72)))).byteLength

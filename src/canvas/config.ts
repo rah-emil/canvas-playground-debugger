@@ -1,6 +1,6 @@
 export interface Quality {
   label: string
-  /** Длина короткой стороны холста в пикселях. */
+  /** Length of the canvas' shorter side in pixels. */
   value: number
 }
 
@@ -34,7 +34,7 @@ export const RATIOS: readonly Ratio[] = [
 export const DEFAULT_QUALITY = QUALITIES[1]
 export const DEFAULT_RATIO = RATIOS[1]
 
-/** Качество = короткая сторона, как в видео: 1080p — это 1920×1080 и 1080×1920. */
+/** Quality = the shorter side, as in video: 1080p means 1920×1080 and 1080×1920. */
 export function getSize(quality: number, ratio: Ratio) {
   const k = ratio.w / ratio.h
   return k >= 1
@@ -42,7 +42,7 @@ export function getSize(quality: number, ratio: Ratio) {
     : { width: quality, height: Math.round(quality / k) }
 }
 
-/** Какой комбинации качество × пропорции соответствует точный размер (если такая есть). */
+/** Which quality × aspect ratio combination produces exactly this size (if any). */
 export function findPreset(width: number, height: number) {
   for (const quality of QUALITIES) {
     for (const ratio of RATIOS) {

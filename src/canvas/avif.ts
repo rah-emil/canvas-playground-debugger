@@ -28,24 +28,28 @@ function getWorker(): Worker {
     if ('error' in e.data) p.reject(new Error(e.data.error))
     else p.resolve(e.data.file)
   })
-  w.addEventListener('error', () => stopWorker(new Error('AVIF-кодировщик не запустился')))
+  w.addEventListener('error', () => stopWorker(new Error('The AVIF encoder failed to start')))
   worker = w
   return w
 }
 
 /**
- * Холст, закодированный в AVIF (готовый файл). Кодирование идёт в воркере и не блокирует страницу;
- * по abort воркер останавливается (устаревший расчёт не должен занимать очередь).
+ * The canvas encoded as AVIF (the finished file). Encoding runs in a worker and does not block the page;
+ * on abort the worker is stopped (a stale calculation must not hold up the queue).
  */
-export function encodeAvifFile(buf: PixelBuffer, signal?: AbortSignal): Promise<ArrayBuffer> {
+export function encodeAvifFile(
+  buf: PixelBuffer,
+  quality: number,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
   if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
   const id = nextId++
   const { data, width, height } = toRawImage(buf)
   const w = getWorker()
 
   return new Promise<ArrayBuffer>((resolve, reject) => {
-    // Воркер останавливаем, только если эта задача ещё не завершилась: иначе прерывание
-    // давно посчитанного размера зря убило бы простаивающий воркер вместе с загруженным wasm.
+    // Stop the worker only if this task has not finished yet: otherwise aborting an already
+    // measured size would needlessly kill an idle worker together with its loaded wasm.
     const onAbort = () => {
       if (pending.has(id)) stopWorker(new DOMException('Aborted', 'AbortError'))
     }
@@ -55,6 +59,6 @@ export function encodeAvifFile(buf: PixelBuffer, signal?: AbortSignal): Promise<
       reject: (reason) => (cleanup(), reject(reason)),
     })
     signal?.addEventListener('abort', onAbort, { once: true })
-    w.postMessage({ id, data, width, height } satisfies AvifRequest, [data.buffer])
+    w.postMessage({ id, quality, data, width, height } satisfies AvifRequest, [data.buffer])
   })
 }

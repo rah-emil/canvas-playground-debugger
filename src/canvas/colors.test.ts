@@ -23,7 +23,7 @@ describe('countColors', () => {
       [0, 0, 0, 0, 1, 2, 3, 255, 4, 5, 6, 255, 1, 2, 3, 255, 4, 5, 6, 255],
     )
     expect(countColors(base)).toBe(2)
-    expect(countColors(base.subarray(4))).toBe(2) // сдвиг на пиксель: байты выровнены по 4
+    expect(countColors(base.subarray(4))).toBe(2) // shifted by one pixel: the bytes are 4-aligned
   })
 
   it('handles an empty array', () => {

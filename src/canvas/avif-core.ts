@@ -1,13 +1,14 @@
 import encode from '@jsquash/avif/encode'
 import type { PixelBuffer } from './pixels'
+import { DEFAULT_LOSSY_QUALITY } from './quality'
 
 /**
- * Параметры оценки размера AVIF. Браузеры не умеют кодировать AVIF сами (canvas.toBlob отдаёт PNG),
- * поэтому используется WASM-кодировщик libavif. Качество 90 — ближайший аналог JPG/WEBP с 0.95,
- * 4:4:4 — чтобы не размывать цветные края у пиксель-арта.
+ * AVIF size-estimation settings. Browsers cannot encode AVIF themselves (canvas.toBlob returns PNG),
+ * so the libavif WASM encoder is used. The quality comes from outside (the shared 1…100 slider;
+ * AVIF has its own scale, so equal numbers for JPG/WEBP/AVIF do not mean equal visual quality),
+ * 4:4:4 keeps colored edges of pixel art from being blurred.
  */
 export const AVIF_OPTIONS = {
-  quality: 90,
   qualityAlpha: -1,
   subsample: 3,
   speed: 6,
@@ -20,7 +21,7 @@ export interface RawImage {
 }
 
 export function toRawImage(buf: PixelBuffer): RawImage {
-  // Копия: данные уходят в воркер как transferable, а исходный буфер холста должен остаться на месте.
+  // A copy: the data is transferred to the worker, while the canvas buffer itself must stay in place.
   return {
     data: buf.image.data.slice() as Uint8ClampedArray<ArrayBuffer>,
     width: buf.width,
@@ -28,7 +29,10 @@ export function toRawImage(buf: PixelBuffer): RawImage {
   }
 }
 
-/** Кодирует RGBA в AVIF и возвращает готовый файл. */
-export async function encodeAvif({ data, width, height }: RawImage): Promise<ArrayBuffer> {
-  return encode({ data, width, height } as unknown as ImageData, AVIF_OPTIONS)
+/** Encodes RGBA as AVIF and returns the finished file. */
+export async function encodeAvif(
+  { data, width, height }: RawImage,
+  quality: number = DEFAULT_LOSSY_QUALITY,
+): Promise<ArrayBuffer> {
+  return encode({ data, width, height } as unknown as ImageData, { ...AVIF_OPTIONS, quality })
 }

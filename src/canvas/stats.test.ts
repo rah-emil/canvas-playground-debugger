@@ -6,8 +6,8 @@ function sample(): PixelBuffer {
   const buf = createBuffer(10, 6)
   const red = { color: packColor('#ff0000'), size: 1, shape: 'square' as const }
   const blue = { ...red, color: packColor('#0000ff') }
-  strokeLine(buf, 1, 1, 4, 1, red) // 4 красных
-  strokeLine(buf, 8, 4, 8, 5, blue) // 2 синих
+  strokeLine(buf, 1, 1, 4, 1, red) // 4 red
+  strokeLine(buf, 8, 4, 8, 5, blue) // 2 blue
   return buf
 }
 

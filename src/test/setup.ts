@@ -1,4 +1,4 @@
-// В node нет ImageData — подставляем минимальную реализацию для юнит-тестов.
+// Node has no ImageData — provide a minimal implementation for the unit tests.
 class ImageDataStub {
   readonly width: number
   readonly height: number

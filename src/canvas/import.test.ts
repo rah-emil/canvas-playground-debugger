@@ -49,7 +49,7 @@ describe('closestRatio', () => {
     [600, 800, '3:4'],
     [1080, 1920, '9:16'],
     [2560, 1080, '21:9'],
-    [1000, 700, '4:3'], // 1.43 ближе к 4:3, чем к 1:1 или 16:9
+    [1000, 700, '4:3'], // 1.43 is closer to 4:3 than to 1:1 or 16:9
   ])('%i×%i -> %s', (w, h, label) => {
     expect(closestRatio(w, h, RATIOS).label).toBe(label)
   })
@@ -57,7 +57,7 @@ describe('closestRatio', () => {
 
 describe('rgbaToBuffer', () => {
   it('keeps opaque pixels, drops transparent ones, thresholds alpha at 128', () => {
-    // 4 пикселя: непрозрачный, прозрачный, alpha=127, alpha=128
+    // 4 pixels: opaque, transparent, alpha=127, alpha=128
     const rgba = new Uint8ClampedArray([
       255, 0, 0, 255, //
       0, 255, 0, 0, //
@@ -70,7 +70,7 @@ describe('rgbaToBuffer', () => {
     expect(buf.data32[1]).toBe(0)
     expect(buf.data32[2]).toBe(0)
     expect(toHex(buf.data32[3])).toBe('#102030')
-    expect(buf.data32[3] >>> 24).toBe(255) // полупрозрачный становится непрозрачным
+    expect(buf.data32[3] >>> 24).toBe(255) // a semi-transparent pixel becomes opaque
   })
 
   it('does not store color for transparent pixels', () => {

@@ -16,6 +16,7 @@ import {
   type Ratio,
 } from '../canvas/config'
 import { downloadBlob, exportBlob, type ExportFormat } from '../canvas/export'
+import { DEFAULT_LOSSY_QUALITY } from '../canvas/quality'
 import { parseCanvasJson } from '../canvas/formats'
 import {
   closestRatio,
@@ -49,14 +50,14 @@ const errorNotice = (e: unknown): Notice => ({
   kind: 'error',
 })
 
-/** JSON по типу/расширению, а если их нет (файл без расширения, переименованный) — по первому символу. */
+/** JSON by type/extension, and when those are missing (no extension, renamed file) — by the first character. */
 async function isJsonFile(file: File): Promise<boolean> {
   if (file.type.startsWith('image/')) return false
   if (file.type === 'application/json' || file.name.toLowerCase().endsWith('.json')) return true
   return (await file.slice(0, 64).text()).trimStart().startsWith('{')
 }
 
-/** Максимальный размер кисти зависит от высоты холста: 1/4 высоты, но не меньше 8px. */
+/** The maximum brush size depends on the canvas height: 1/4 of it, but not less than 8px. */
 export function maxBrushSize(height: number): number {
   return Math.max(8, Math.round(height / 4))
 }
@@ -72,9 +73,9 @@ export function useCanvasEditor() {
   const [color, setColor] = useState('#e5484d')
   const [brushSize, setBrushSize] = useState(4)
   const [shape, setShape] = useState<BrushShape>('square')
-  // Буфер мутируется на месте во время рисования; новая идентичность = новый размер или сброс.
+  // The buffer is mutated in place while drawing; a new identity means a new size or a reset.
   const [buffer, setBuffer] = useState(initialBuffer)
-  // Растёт после каждого штриха — по нему пересчитывается информация по холсту.
+  // Grows after every stroke — the canvas information is recalculated by it.
   const [revision, setRevision] = useState(0)
   const [hover, setHover] = useState<Point | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -82,12 +83,14 @@ export function useCanvasEditor() {
   const [smooth, setSmooth] = useState(true)
   const [matchRatio, setMatchRatio] = useState(true)
   const [dragOver, setDragOver] = useState(false)
+  // JPG/WEBP compression level: shared by downloads and by the size estimates in the formats block.
+  const [lossyQuality, setLossyQuality] = useState(DEFAULT_LOSSY_QUALITY)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lastPoint = useRef<Point | null>(null)
 
-  // Выбранный размер хранится как есть (чтобы вернуться к нему на большом холсте),
-  // но рисуем и показываем не больше допустимого максимума текущего холста.
+  // The chosen size is stored as is (so it comes back on a big canvas),
+  // but we draw and show no more than the maximum allowed for the current canvas.
   const maxBrush = maxBrushSize(buffer.height)
   const effectiveBrushSize = Math.min(brushSize, maxBrush)
 
@@ -115,14 +118,14 @@ export function useCanvasEditor() {
   const exportAs = useCallback(
     async (format: ExportFormat) => {
       try {
-        const blob = await exportBlob(buffer, format)
+        const blob = await exportBlob(buffer, format, lossyQuality)
         downloadBlob(blob, `canvas-${buffer.width}x${buffer.height}.${format}`)
         setNotice(null)
       } catch (e) {
         setNotice(errorNotice(e))
       }
     },
-    [buffer],
+    [buffer, lossyQuality],
   )
 
   const importFile = useCallback(
@@ -132,7 +135,7 @@ export function useCanvasEditor() {
           const { buffer: parsed } = parseCanvasJson(await file.text())
           const preset = findPreset(parsed.width, parsed.height)
           if (preset) {
-            // Размер из файла совпал с пресетом — восстанавливаем холст точь-в-точь.
+            // The size from the file matches a preset — restore the canvas exactly.
             setQuality(preset.quality.value)
             setRatio(preset.ratio)
             setBuffer(parsed)
@@ -143,16 +146,16 @@ export function useCanvasEditor() {
             setNotice({
               kind: 'info',
               text:
-                `Размер холста в файле (${parsed.width}×${parsed.height}) не совпадает ни с одним пресетом, ` +
-                `поэтому он вставлен по центру текущего холста ${size.width}×${size.height} без масштабирования.`,
+                `The canvas size in the file (${parsed.width}×${parsed.height}) matches none of the presets, ` +
+                `so it was placed in the center of the current ${size.width}×${size.height} canvas without scaling.`,
             })
           }
           setRevision((r) => r + 1)
           return
         }
-        if (!file.type.startsWith('image/')) throw new Error('Поддерживаются изображения и JSON холста')
+        if (!file.type.startsWith('image/')) throw new Error('Only images and canvas JSON files are supported')
         let nextRatio = ratio
-        // В режиме «Оригинал» размер холста остаётся таким, как выбрал пользователь.
+        // In "Original" mode the canvas size stays what the user chose.
         if (matchRatio && fit !== 'original') {
           const { width, height } = await readImageSize(file)
           nextRatio = closestRatio(width, height, RATIOS)
@@ -250,6 +253,8 @@ export function useCanvasEditor() {
     changeResolution,
     reset,
     exportAs,
+    lossyQuality,
+    setLossyQuality,
     importFile,
     fit,
     setFit,
