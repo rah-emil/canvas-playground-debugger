@@ -68,6 +68,21 @@ export function rgbaToBuffer(rgba: Uint8ClampedArray, width: number, height: num
   return buf
 }
 
+/** Переносит готовый буфер на холст другого размера: по центру, без масштабирования, лишнее обрезается. */
+export function placeCentered(src: PixelBuffer, width: number, height: number): PixelBuffer {
+  const dst = createBuffer(width, height)
+  const r = fitRect(src.width, src.height, width, height, 'original')
+  for (let sy = 0; sy < src.height; sy++) {
+    const dy = r.y + sy
+    if (dy < 0 || dy >= height) continue
+    for (let sx = 0; sx < src.width; sx++) {
+      const dx = r.x + sx
+      if (dx >= 0 && dx < width) dst.data32[dy * width + dx] = src.data32[sy * src.width + sx]
+    }
+  }
+  return dst
+}
+
 async function loadImage(file: Blob): Promise<HTMLImageElement> {
   const url = URL.createObjectURL(file)
   try {

@@ -1,45 +1,58 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { downloadBlob } from '../canvas/export'
+import {
+  JSON_EXPORT_FORMATS,
+  jsonExportFilename,
+  type CanvasJsonFormat,
+} from '../canvas/formats'
 import type { PixelBuffer } from '../canvas/pixels'
-import { analyze, listPixels, stateToJson } from '../canvas/stats'
+import { analyze, listPixels } from '../canvas/stats'
+import { ExportSizes } from './ExportSizes'
 
 const PIXEL_LIMIT = 500
 const COLOR_LIMIT = 200
 
 interface Props {
   buffer: PixelBuffer
+  format: CanvasJsonFormat
+  onFormatChange: (format: CanvasJsonFormat) => void
 }
 
 // Буфер мутируется на месте, поэтому родитель перемонтирует панель (key) после каждого штриха.
-export function InfoPanel({ buffer }: Props) {
-  const [copied, setCopied] = useState(false)
-
+// Поэтому выбранный формат хранится у родителя, а не здесь.
+export function InfoPanel({ buffer, format, onFormatChange }: Props) {
   const stats = useMemo(() => analyze(buffer), [buffer])
   const pixels = useMemo(() => listPixels(buffer, PIXEL_LIMIT), [buffer])
 
-  const copyJson = async () => {
-    await navigator.clipboard.writeText(stateToJson(buffer))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
-  const downloadJson = () =>
+  const download = () => {
+    const selected = JSON_EXPORT_FORMATS.find((f) => f.id === format) ?? JSON_EXPORT_FORMATS[0]
     downloadBlob(
-      new Blob([stateToJson(buffer)], { type: 'application/json' }),
-      `canvas-${buffer.width}x${buffer.height}.json`,
+      new Blob([selected.serialize(buffer)], { type: 'application/json' }),
+      jsonExportFilename(selected, buffer),
     )
+  }
 
   return (
     <section className="info">
       <div className="info-head">
         <h2>Состояние холста</h2>
-        <div className="seg">
-          <button type="button" onClick={copyJson}>
-            {copied ? 'Скопировано' : 'Копировать JSON'}
-          </button>
-          <button type="button" onClick={downloadJson}>
-            Скачать JSON
-          </button>
+        <div className="info-actions">
+          <select
+            aria-label="Формат экспорта"
+            value={format}
+            onChange={(e) => onFormatChange(e.target.value as CanvasJsonFormat)}
+          >
+            {JSON_EXPORT_FORMATS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <div className="seg">
+            <button type="button" onClick={download}>
+              Скачать
+            </button>
+          </div>
         </div>
       </div>
 
@@ -63,6 +76,8 @@ export function InfoPanel({ buffer }: Props) {
         <dt>Уникальных цветов</dt>
         <dd>{stats.colors.length}</dd>
       </dl>
+
+      <ExportSizes buffer={buffer} />
 
       <div className="tables">
         <div>

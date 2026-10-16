@@ -118,7 +118,7 @@ export function Toolbar({ editor, infoOpen, onToggleInfo }: Props) {
       </div>
 
       <div className="field">
-        <span>Импорт картинки</span>
+        <span>Импорт (картинка или JSON)</span>
         <div className="row">
           <div className="seg">
             <button type="button" onClick={() => fileInput.current?.click()}>
@@ -160,7 +160,7 @@ export function Toolbar({ editor, infoOpen, onToggleInfo }: Props) {
         <input
           ref={fileInput}
           type="file"
-          accept="image/*"
+          accept="image/*,.json,application/json"
           hidden
           data-testid="import-input"
           onChange={(e) => {

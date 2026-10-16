@@ -41,3 +41,14 @@ export function getSize(quality: number, ratio: Ratio) {
     ? { width: Math.round(quality * k), height: quality }
     : { width: quality, height: Math.round(quality / k) }
 }
+
+/** Какой комбинации качество × пропорции соответствует точный размер (если такая есть). */
+export function findPreset(width: number, height: number) {
+  for (const quality of QUALITIES) {
+    for (const ratio of RATIOS) {
+      const size = getSize(quality.value, ratio)
+      if (size.width === width && size.height === height) return { quality, ratio }
+    }
+  }
+  return undefined
+}

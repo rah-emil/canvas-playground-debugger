@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { expect, test, type Download, type Locator, type Page } from '@playwright/test'
 
 const canvasOf = (page: Page) => page.locator('canvas.canvas')
@@ -283,7 +283,7 @@ test.describe('info panel', () => {
     await setBrush(page, 1)
     await stroke(page, [10, 20], [14, 20])
     await button(page, 'Информация').click()
-    const dl = await download(page, 'Скачать JSON')
+    const dl = await download(page, 'Скачать')
     expect(dl.suggestedFilename()).toBe('canvas-256x144.json')
     const state = JSON.parse(await readFile((await dl.path())!, 'utf8'))
     expect(state).toEqual({
@@ -572,7 +572,7 @@ test.describe('image import', () => {
       mimeType: 'text/plain',
       buffer: Buffer.from('hello'),
     })
-    await expect(page.locator('.notice')).toHaveText('Это не изображение')
+    await expect(page.locator('.notice')).toHaveText('Поддерживаются изображения и JSON холста')
     expect(await paintedCount(canvasOf(page))).toBe(0)
   })
 
@@ -597,5 +597,357 @@ test.describe('image import', () => {
     await expect(page.locator('.stage')).not.toHaveClass(/drag-over/)
     expect(await paintedCount(canvas)).toBe(256 * 144)
     expect(await pixelAt(canvas, 100, 70)).toEqual([255, 0, 255, 255])
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Экспорт/импорт JSON: RLE и Delta+RLE
+// ---------------------------------------------------------------------------------------------
+
+/** Размер и хэш всех пикселей холста — чтобы сравнивать рисунки целиком. */
+async function snapshot(canvas: Locator) {
+  return canvas.evaluate((c: HTMLCanvasElement) => {
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+    let h = 2166136261
+    for (let i = 0; i < d.length; i++) {
+      h ^= d[i]
+      h = Math.imul(h, 16777619)
+    }
+    return `${c.width}x${c.height}:${h >>> 0}`
+  })
+}
+
+async function drawSample(page: Page) {
+  await setBrush(page, 3)
+  await stroke(page, [10, 10], [200, 60])
+  await colorInput(page).fill('#0091ff')
+  await button(page, 'Круг').click()
+  await setBrush(page, 6)
+  await stroke(page, [30, 120], [220, 20])
+  await colorInput(page).fill('#30a46c')
+  await setBrush(page, 1)
+  await stroke(page, [128, 0], [128, 143])
+}
+
+async function saveJson(page: Page, format: 'RLE JSON' | 'Delta+RLE JSON') {
+  if (!(await page.locator('.info').count())) await button(page, 'Информация').click()
+  await page.getByLabel('Формат экспорта').selectOption({ label: format })
+  const dl = await download(page, 'Скачать')
+  // Сохраняем под настоящим именем (временный файл Playwright — UUID без расширения).
+  const path = test.info().outputPath(dl.suggestedFilename())
+  await dl.saveAs(path)
+  return { path, filename: dl.suggestedFilename() }
+}
+
+const jsonOf = async (path: string) => JSON.parse(await readFile(path, 'utf8'))
+
+test.describe('JSON export', () => {
+  test('Delta+RLE: stores neighbor deltas as runs', async ({ page }) => {
+    await setBrush(page, 1)
+    await stroke(page, [10, 20], [14, 20]) // 5 красных пикселей подряд, индексы 5130…5134
+    const { path, filename } = await saveJson(page, 'Delta+RLE JSON')
+    expect(filename).toBe('canvas-256x144.delta-rle.json')
+    expect(await jsonOf(path)).toEqual({
+      format: 'delta-rle',
+      version: 1,
+      width: 256,
+      height: 144,
+      painted: 5,
+      scan: 'row-major',
+      predictor: 'previous-pixel',
+      runs: [
+        [5130, 0, 0, 0, 0],
+        [1, 229, 72, 77, 255],
+        [4, 0, 0, 0, 0],
+        [1, -229, -72, -77, -255],
+        [256 * 144 - 5136, 0, 0, 0, 0],
+      ],
+    })
+  })
+
+  test('formats are chosen from one select with a single download button', async ({ page }) => {
+    await button(page, 'Информация').click()
+    const select = page.getByLabel('Формат экспорта')
+    await expect(select.locator('option')).toHaveText(['RLE JSON', 'Delta+RLE JSON'])
+    await expect(select).toHaveValue('rle') // по умолчанию — прежний формат
+    await expect(page.locator('.info').getByRole('button')).toHaveCount(1)
+    await expect(page.locator('.info').getByRole('button', { name: 'Скачать', exact: true })).toBeVisible()
+  })
+
+  test('the selected format is kept while drawing (the panel re-renders after each stroke)', async ({ page }) => {
+    await button(page, 'Информация').click()
+    await page.getByLabel('Формат экспорта').selectOption({ label: 'Delta+RLE JSON' })
+    await setBrush(page, 1)
+    await click(page, [5, 5])
+    await click(page, [6, 5])
+    await expect(page.getByLabel('Формат экспорта')).toHaveValue('delta-rle')
+    const dl = await download(page, 'Скачать')
+    expect(dl.suggestedFilename()).toBe('canvas-256x144.delta-rle.json')
+  })
+
+  test('download follows the selected format', async ({ page }) => {
+    await setBrush(page, 1)
+    await click(page, [5, 5])
+    expect((await jsonOf((await saveJson(page, 'RLE JSON')).path)).palette).toEqual(['#e5484d'])
+    expect((await jsonOf((await saveJson(page, 'Delta+RLE JSON')).path)).format).toBe('delta-rle')
+  })
+
+  test('RLE file name is unchanged', async ({ page }) => {
+    await setBrush(page, 1)
+    await click(page, [5, 5])
+    expect((await saveJson(page, 'RLE JSON')).filename).toBe('canvas-256x144.json')
+  })
+})
+
+test.describe('JSON import', () => {
+  for (const format of ['RLE JSON', 'Delta+RLE JSON'] as const) {
+    test(`${format}: draw -> download -> reset -> import restores the canvas exactly`, async ({ page }) => {
+      const canvas = canvasOf(page)
+      await drawSample(page)
+      const before = await snapshot(canvas)
+      const painted = await paintedCount(canvas)
+      expect(painted).toBeGreaterThan(500)
+
+      const { path } = await saveJson(page, format)
+      await button(page, 'Сбросить').click()
+      expect(await paintedCount(canvas)).toBe(0)
+
+      await importInput(page).setInputFiles(path)
+      await expect(page.locator('.notice')).toHaveCount(0)
+      expect(await snapshot(canvas)).toBe(before)
+      expect(await paintedCount(canvas)).toBe(painted)
+    })
+
+    test(`${format}: import restores the size and the quality/ratio controls`, async ({ page }) => {
+      const canvas = canvasOf(page)
+      await button(page, '1:1').click()
+      await qualitySelect(page).selectOption('240')
+      await setBrush(page, 5)
+      await stroke(page, [20, 30], [200, 150])
+      const before = await snapshot(canvas)
+      const { path } = await saveJson(page, format)
+
+      await button(page, '21:9').click()
+      await qualitySelect(page).selectOption('72')
+      expect(await size(canvas)).toEqual([168, 72])
+
+      await importInput(page).setInputFiles(path)
+      expect(await size(canvas)).toEqual([240, 240])
+      expect(await snapshot(canvas)).toBe(before)
+      await expect(button(page, '1:1')).toHaveClass(/active/)
+      await expect(qualitySelect(page)).toHaveValue('240')
+    })
+  }
+
+  test('the info panel shows the imported state', async ({ page }) => {
+    await setBrush(page, 1)
+    await stroke(page, [10, 20], [14, 20])
+    const { path } = await saveJson(page, 'Delta+RLE JSON')
+    await button(page, 'Сбросить').click()
+    await expect(page.locator('.info')).toContainText('0 px (0.00%)')
+    await importInput(page).setInputFiles(path)
+    await expect(page.locator('.info')).toContainText('5 px')
+    await expect(page.locator('.info')).toContainText('x 10…14, y 20…20')
+  })
+
+  test('imports an RLE JSON saved by an earlier version (no "format" field)', async ({ page }) => {
+    const canvas = canvasOf(page)
+    const legacy = '{"width":256,"height":144,"painted":5,"palette":["#e5484d"],"rows":{"20":[[10,5,0]]}}'
+    await importInput(page).setInputFiles({
+      name: 'old.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(legacy),
+    })
+    expect(await paintedCount(canvas)).toBe(5)
+    expect(await pixelAt(canvas, 10, 20)).toEqual([229, 72, 77, 255])
+    expect(await pixelAt(canvas, 14, 20)).toEqual([229, 72, 77, 255])
+    expect(await pixelAt(canvas, 15, 20)).toEqual([0, 0, 0, 0])
+  })
+
+  test('a file whose size matches no preset is placed in the center with a notice', async ({ page }) => {
+    const canvas = canvasOf(page)
+    const custom = JSON.stringify({
+      width: 10, height: 5, palette: ['#00ff00'], rows: { 2: [[3, 4, 0]] },
+    })
+    await importInput(page).setInputFiles({ name: 'custom.json', mimeType: 'application/json', buffer: Buffer.from(custom) })
+    expect(await size(canvas)).toEqual([256, 144]) // холст не менялся
+    // смещение ((256-10)/2, (144-5)/2) = (123, 69): серия x=3..6, y=2 -> (126..129, 71)
+    expect(await paintedCount(canvas)).toBe(4)
+    expect(await pixelAt(canvas, 126, 71)).toEqual([0, 255, 0, 255])
+    expect(await pixelAt(canvas, 129, 71)).toEqual([0, 255, 0, 255])
+    expect(await pixelAt(canvas, 130, 71)).toEqual([0, 0, 0, 0])
+    const notice = page.locator('.notice')
+    await expect(notice).toHaveClass(/info/)
+    await expect(notice).toContainText('10×5')
+    await expect(notice).toContainText('по центру')
+  })
+
+  const broken: [string, string, string][] = [
+    ['not JSON at all', 'hello {', 'не является корректным JSON'],
+    ['unknown structure', '{"a":1}', 'Неизвестный формат'],
+    ['RLE run beyond the width', '{"width":256,"height":144,"palette":["#ff0000"],"rows":{"0":[[250,10,0]]}}', 'выходит за ширину'],
+    ['Delta+RLE with wrong pixel count', '{"format":"delta-rle","width":256,"height":144,"runs":[[10,0,0,0,0]]}', 'покрывают 10 пикселей'],
+    ['Delta+RLE with channel overflow', '{"format":"delta-rle","width":256,"height":144,"runs":[[1,300,0,0,255],[36863,0,0,0,0]]}', 'вышло за 0…255'],
+  ]
+  for (const [name, content, message] of broken) {
+    test(`rejects ${name} and leaves the canvas untouched`, async ({ page }) => {
+      const canvas = canvasOf(page)
+      await setBrush(page, 4)
+      await stroke(page, [10, 10], [60, 40])
+      const before = await snapshot(canvas)
+      await importInput(page).setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(content) })
+      const notice = page.locator('.notice')
+      await expect(notice).toContainText(message)
+      await expect(notice).toHaveClass(/error/)
+      expect(await snapshot(canvas)).toBe(before)
+    })
+  }
+
+  test('recognizes a JSON file by content when it has no .json extension', async ({ page }) => {
+    const text = '  \n{"width":256,"height":144,"palette":["#ff0000"],"rows":{"0":[[0,3,0]]}}'
+    await importInput(page).setInputFiles({ name: 'canvas-backup', mimeType: 'application/octet-stream', buffer: Buffer.from(text) })
+    await expect(page.locator('.notice')).toHaveCount(0)
+    expect(await paintedCount(canvasOf(page))).toBe(3)
+  })
+
+  test('a successful import clears an earlier error', async ({ page }) => {
+    await importInput(page).setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{') })
+    await expect(page.locator('.notice')).toBeVisible()
+    const ok = '{"width":256,"height":144,"palette":["#ff0000"],"rows":{"0":[[0,1,0]]}}'
+    await importInput(page).setInputFiles({ name: 'ok.json', mimeType: 'application/json', buffer: Buffer.from(ok) })
+    await expect(page.locator('.notice')).toHaveCount(0)
+    expect(await paintedCount(canvasOf(page))).toBe(1)
+  })
+
+  test('accepts a JSON file dropped onto the canvas area', async ({ page }) => {
+    const canvas = canvasOf(page)
+    const text = '{"format":"delta-rle","width":256,"height":144,"runs":[[1,255,0,0,255],[36863,0,0,0,0]]}'
+    const dataTransfer = await page.evaluateHandle((t) => {
+      const dt = new DataTransfer()
+      dt.items.add(new File([t], 'drop.json', { type: 'application/json' }))
+      return dt
+    }, text)
+    await page.dispatchEvent('.stage', 'dragover', { dataTransfer })
+    await page.dispatchEvent('.stage', 'drop', { dataTransfer })
+    // первый пиксель красный, дальше дельты нулевые — весь холст красный
+    await expect.poll(() => paintedCount(canvas)).toBe(256 * 144)
+    expect(await pixelAt(canvas, 255, 143)).toEqual([255, 0, 0, 255])
+  })
+
+  test('4K 21:9 canvas survives a Delta+RLE round trip', async ({ page }) => {
+    test.setTimeout(90_000)
+    const canvas = canvasOf(page)
+    await button(page, '21:9').click()
+    await qualitySelect(page).selectOption('2160')
+    expect(await size(canvas)).toEqual([5040, 2160])
+    await setBrush(page, 40)
+    await stroke(page, [200, 200], [4800, 1900])
+    const before = await snapshot(canvas)
+    const { path } = await saveJson(page, 'Delta+RLE JSON')
+    await button(page, 'Сбросить').click()
+    await importInput(page).setInputFiles(path)
+    await expect.poll(() => snapshot(canvas), { timeout: 30_000 }).toBe(before)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Размер файла по форматам
+// ---------------------------------------------------------------------------------------------
+
+const sizeCell = (page: Page, id: string) => page.locator(`.export-sizes [data-format="${id}"] .bytes`)
+
+/** Дожидается, пока посчитан формат, и возвращает размер в байтах. */
+async function shownBytes(page: Page, id: string) {
+  await expect(sizeCell(page, id)).toHaveAttribute('data-bytes', /^\d+$/, { timeout: 30_000 })
+  return Number(await sizeCell(page, id).getAttribute('data-bytes'))
+}
+
+async function fileSize(dl: Download) {
+  return (await stat((await dl.path())!)).size
+}
+
+const SIZE_IDS = ['png', 'jpg', 'webp', 'svg', 'json:rle', 'json:delta-rle']
+
+test.describe('export sizes', () => {
+  test('lists every export format and fills in a size for each', async ({ page }) => {
+    await setBrush(page, 3)
+    await stroke(page, [20, 20], [200, 100])
+    await button(page, 'Информация').click()
+    const rows = page.locator('.export-sizes tbody tr')
+    await expect(rows).toHaveCount(SIZE_IDS.length)
+    await expect(rows.locator('th')).toHaveText(['PNG', 'JPG', 'WEBP', 'SVG', 'RLE JSON', 'Delta+RLE JSON'])
+    for (const id of SIZE_IDS) expect(await shownBytes(page, id)).toBeGreaterThan(0)
+    await expect(page.locator('.export-sizes')).not.toContainText('считаю')
+    await expect(page.locator('.export-sizes')).toContainText(/\d+(,\d)? (Б|КБ|МБ)/)
+  })
+
+  test('shown sizes equal the sizes of the files actually downloaded', async ({ page }) => {
+    await setBrush(page, 5)
+    await stroke(page, [20, 20], [200, 100])
+    await colorInput(page).fill('#0091ff')
+    await stroke(page, [30, 120], [220, 30])
+    await button(page, 'Информация').click()
+
+    for (const format of ['PNG', 'JPG', 'WEBP', 'SVG'] as const) {
+      const expected = await shownBytes(page, format.toLowerCase())
+      expect(await fileSize(await download(page, format)), format).toBe(expected)
+    }
+    for (const [id, label] of [['json:rle', 'RLE JSON'], ['json:delta-rle', 'Delta+RLE JSON']] as const) {
+      const expected = await shownBytes(page, id)
+      await page.getByLabel('Формат экспорта').selectOption({ label })
+      expect(await fileSize(await download(page, 'Скачать')), label).toBe(expected)
+    }
+  })
+
+  test('highlights the smallest format once everything is measured', async ({ page }) => {
+    await setBrush(page, 3)
+    await stroke(page, [20, 20], [200, 100])
+    await button(page, 'Информация').click()
+    for (const id of SIZE_IDS) await shownBytes(page, id)
+    await expect(page.locator('.export-sizes .badge')).toHaveCount(1)
+    const bytes = await Promise.all(SIZE_IDS.map((id) => shownBytes(page, id)))
+    const smallest = SIZE_IDS[bytes.indexOf(Math.min(...bytes))]
+    await expect(page.locator(`.export-sizes [data-format="${smallest}"] .badge`)).toHaveText('минимум')
+  })
+
+  test('sizes follow the drawing: more strokes -> bigger RLE JSON and SVG', async ({ page }) => {
+    await setBrush(page, 2)
+    await stroke(page, [20, 20], [100, 20])
+    await button(page, 'Информация').click()
+    const before = { rle: await shownBytes(page, 'json:rle'), svg: await shownBytes(page, 'svg') }
+    await stroke(page, [20, 60], [120, 110])
+    await colorInput(page).fill('#30a46c')
+    await stroke(page, [200, 20], [60, 130])
+    await expect.poll(() => shownBytes(page, 'json:rle'), { timeout: 30_000 }).toBeGreaterThan(before.rle)
+    await expect.poll(() => shownBytes(page, 'svg'), { timeout: 30_000 }).toBeGreaterThan(before.svg)
+  })
+
+  test('sizes are recalculated after reset and after a resolution change', async ({ page }) => {
+    await setBrush(page, 3)
+    await stroke(page, [20, 20], [200, 100])
+    await button(page, 'Информация').click()
+    const drawn = await shownBytes(page, 'json:rle')
+    await button(page, 'Сбросить').click()
+    await expect.poll(() => shownBytes(page, 'json:rle')).toBeLessThan(drawn)
+    const small = await shownBytes(page, 'png')
+    await qualitySelect(page).selectOption('720')
+    await expect.poll(() => shownBytes(page, 'png'), { timeout: 30_000 }).not.toBe(small)
+  })
+
+  test('an empty canvas: RLE is tiny, Delta+RLE is a single run', async ({ page }) => {
+    await button(page, 'Информация').click()
+    expect(await shownBytes(page, 'json:rle')).toBeLessThan(100)
+    expect(await shownBytes(page, 'json:delta-rle')).toBeLessThan(200)
+  })
+
+  test('shows sizes for a 4K 21:9 canvas without freezing the page', async ({ page }) => {
+    test.setTimeout(120_000)
+    await button(page, 'Информация').click()
+    await button(page, '21:9').click()
+    await qualitySelect(page).selectOption('2160')
+    // пока считается, страница остаётся отзывчивой: интерфейс откликается на клик
+    await button(page, 'Круг').click()
+    await expect(button(page, 'Круг')).toHaveClass(/active/)
+    for (const id of SIZE_IDS) expect(await shownBytes(page, id)).toBeGreaterThan(0)
   })
 })

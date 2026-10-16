@@ -11,13 +11,16 @@ import {
   DEFAULT_QUALITY,
   DEFAULT_RATIO,
   RATIOS,
+  findPreset,
   getSize,
   type Ratio,
 } from '../canvas/config'
 import { downloadBlob, exportBlob, type ExportFormat } from '../canvas/export'
+import { parseCanvasJson } from '../canvas/formats'
 import {
   closestRatio,
   importImage,
+  placeCentered,
   readImageSize,
   type FitMode,
 } from '../canvas/import'
@@ -34,6 +37,23 @@ import {
 interface Point {
   x: number
   y: number
+}
+
+interface Notice {
+  text: string
+  kind: 'error' | 'info'
+}
+
+const errorNotice = (e: unknown): Notice => ({
+  text: e instanceof Error ? e.message : String(e),
+  kind: 'error',
+})
+
+/** JSON по типу/расширению, а если их нет (файл без расширения, переименованный) — по первому символу. */
+async function isJsonFile(file: File): Promise<boolean> {
+  if (file.type.startsWith('image/')) return false
+  if (file.type === 'application/json' || file.name.toLowerCase().endsWith('.json')) return true
+  return (await file.slice(0, 64).text()).trimStart().startsWith('{')
 }
 
 /** Максимальный размер кисти зависит от высоты холста: 1/4 высоты, но не меньше 8px. */
@@ -57,7 +77,7 @@ export function useCanvasEditor() {
   // Растёт после каждого штриха — по нему пересчитывается информация по холсту.
   const [revision, setRevision] = useState(0)
   const [hover, setHover] = useState<Point | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [fit, setFit] = useState<FitMode>('original')
   const [smooth, setSmooth] = useState(true)
   const [matchRatio, setMatchRatio] = useState(true)
@@ -99,7 +119,7 @@ export function useCanvasEditor() {
         downloadBlob(blob, `canvas-${buffer.width}x${buffer.height}.${format}`)
         setNotice(null)
       } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e))
+        setNotice(errorNotice(e))
       }
     },
     [buffer],
@@ -108,7 +128,29 @@ export function useCanvasEditor() {
   const importFile = useCallback(
     async (file: File) => {
       try {
-        if (!file.type.startsWith('image/')) throw new Error('Это не изображение')
+        if (await isJsonFile(file)) {
+          const { buffer: parsed } = parseCanvasJson(await file.text())
+          const preset = findPreset(parsed.width, parsed.height)
+          if (preset) {
+            // Размер из файла совпал с пресетом — восстанавливаем холст точь-в-точь.
+            setQuality(preset.quality.value)
+            setRatio(preset.ratio)
+            setBuffer(parsed)
+            setNotice(null)
+          } else {
+            const size = getSize(quality, ratio)
+            setBuffer(placeCentered(parsed, size.width, size.height))
+            setNotice({
+              kind: 'info',
+              text:
+                `Размер холста в файле (${parsed.width}×${parsed.height}) не совпадает ни с одним пресетом, ` +
+                `поэтому он вставлен по центру текущего холста ${size.width}×${size.height} без масштабирования.`,
+            })
+          }
+          setRevision((r) => r + 1)
+          return
+        }
+        if (!file.type.startsWith('image/')) throw new Error('Поддерживаются изображения и JSON холста')
         let nextRatio = ratio
         // В режиме «Оригинал» размер холста остаётся таким, как выбрал пользователь.
         if (matchRatio && fit !== 'original') {
@@ -122,7 +164,7 @@ export function useCanvasEditor() {
         setRevision((r) => r + 1)
         setNotice(null)
       } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e))
+        setNotice(errorNotice(e))
       }
     },
     [fit, smooth, matchRatio, quality, ratio],
@@ -203,7 +245,8 @@ export function useCanvasEditor() {
     buffer,
     revision,
     hover,
-    notice,
+    notice: notice?.text ?? null,
+    noticeKind: notice?.kind ?? 'error',
     changeResolution,
     reset,
     exportAs,

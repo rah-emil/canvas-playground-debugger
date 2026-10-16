@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { CanvasJsonFormat } from './canvas/formats'
 import { InfoPanel } from './components/InfoPanel'
 import { Toolbar } from './components/Toolbar'
 import { useCanvasEditor } from './hooks/useCanvasEditor'
@@ -7,7 +8,8 @@ import './App.css'
 function App() {
   const editor = useCanvasEditor()
   const [infoOpen, setInfoOpen] = useState(false)
-  const { buffer, canvasProps, revision, notice, dragOver, dropProps } = editor
+  const [jsonFormat, setJsonFormat] = useState<CanvasJsonFormat>('rle')
+  const { buffer, canvasProps, revision, notice, noticeKind, dragOver, dropProps } = editor
 
   return (
     <main className="app">
@@ -18,7 +20,7 @@ function App() {
         infoOpen={infoOpen}
         onToggleInfo={() => setInfoOpen((v) => !v)}
       />
-      {notice && <p className="notice">{notice}</p>}
+      {notice && <p className={`notice ${noticeKind}`}>{notice}</p>}
 
       <div className={`stage${dragOver ? ' drag-over' : ''}`} {...dropProps}>
         <canvas
@@ -31,7 +33,14 @@ function App() {
         />
       </div>
 
-      {infoOpen && <InfoPanel key={revision} buffer={buffer} />}
+      {infoOpen && (
+        <InfoPanel
+          key={revision}
+          buffer={buffer}
+          format={jsonFormat}
+          onFormatChange={setJsonFormat}
+        />
+      )}
     </main>
   )
 }
