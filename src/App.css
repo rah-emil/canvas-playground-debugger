@@ -293,10 +293,35 @@ select {
     color: var(--text-h);
     width: 130px;
   }
-  .bytes {
-    width: 150px;
+  thead th {
+    font-size: 12px;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .bytes,
+  .colors {
     font-family: var(--mono);
     color: var(--text-h);
+  }
+  .bytes {
+    width: 150px;
+  }
+  .colors {
+    width: 200px;
+  }
+  .delta {
+    margin-left: 8px;
+    font: 12px var(--sans);
+    font-style: normal;
+
+    &.same {
+      color: var(--text);
+    }
+    &.changed {
+      color: #e5a13a;
+    }
   }
   .bar-cell {
     width: 100%;

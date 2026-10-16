@@ -866,7 +866,7 @@ async function fileSize(dl: Download) {
   return (await stat((await dl.path())!)).size
 }
 
-const SIZE_IDS = ['png', 'jpg', 'webp', 'svg', 'json:rle', 'json:delta-rle']
+const SIZE_IDS = ['png', 'jpg', 'webp', 'svg', 'avif', 'json:rle', 'json:delta-rle']
 
 test.describe('export sizes', () => {
   test('lists every export format and fills in a size for each', async ({ page }) => {
@@ -875,9 +875,9 @@ test.describe('export sizes', () => {
     await button(page, 'Информация').click()
     const rows = page.locator('.export-sizes tbody tr')
     await expect(rows).toHaveCount(SIZE_IDS.length)
-    await expect(rows.locator('th')).toHaveText(['PNG', 'JPG', 'WEBP', 'SVG', 'RLE JSON', 'Delta+RLE JSON'])
+    await expect(rows.locator('th')).toHaveText(['PNG', 'JPG', 'WEBP', 'SVG', 'AVIF', 'RLE JSON', 'Delta+RLE JSON'])
     for (const id of SIZE_IDS) expect(await shownBytes(page, id)).toBeGreaterThan(0)
-    await expect(page.locator('.export-sizes')).not.toContainText('считаю')
+    await expect(page.locator('.export-sizes')).not.toContainText('считаю…')
     await expect(page.locator('.export-sizes')).toContainText(/\d+(,\d)? (Б|КБ|МБ)/)
   })
 
@@ -949,5 +949,167 @@ test.describe('export sizes', () => {
     await button(page, 'Круг').click()
     await expect(button(page, 'Круг')).toHaveClass(/active/)
     for (const id of SIZE_IDS) expect(await shownBytes(page, id)).toBeGreaterThan(0)
+  })
+})
+
+test.describe('AVIF size', () => {
+  test('is measured by the WASM encoder and explained to the user', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await setBrush(page, 3)
+    await stroke(page, [20, 20], [200, 100])
+    await button(page, 'Информация').click()
+    expect(await shownBytes(page, 'avif')).toBeGreaterThan(50)
+    await expect(page.locator('.export-sizes')).toContainText('WASM-кодировщик')
+    await expect(page.locator('.export-sizes')).toContainText('скачивание в AVIF не реализовано')
+    expect(errors).toEqual([])
+  })
+
+  test('is smaller than PNG and JPG for a drawing', async ({ page }) => {
+    await setBrush(page, 5)
+    await stroke(page, [20, 20], [200, 100])
+    await stroke(page, [30, 120], [220, 30])
+    await button(page, 'Информация').click()
+    const avif = await shownBytes(page, 'avif')
+    expect(avif).toBeLessThan(await shownBytes(page, 'png'))
+    expect(avif).toBeLessThan(await shownBytes(page, 'jpg'))
+  })
+
+  test('follows the drawing: empty canvas < drawn canvas', async ({ page }) => {
+    await button(page, 'Информация').click()
+    const empty = await shownBytes(page, 'avif')
+    await setBrush(page, 4)
+    await stroke(page, [20, 20], [200, 100])
+    await stroke(page, [30, 120], [220, 30])
+    await expect.poll(() => shownBytes(page, 'avif'), { timeout: 30_000 }).toBeGreaterThan(empty)
+  })
+
+  test('a big calculation is cancelled when the canvas changes, and the encoder recovers', async ({ page }) => {
+    test.setTimeout(120_000)
+    await button(page, 'Информация').click()
+    await button(page, '21:9').click()
+    await qualitySelect(page).selectOption('2160') // тяжёлый холст: AVIF считается несколько секунд
+    await expect(sizeCell(page, 'avif')).toContainText('считаю') // расчёт идёт
+    await qualitySelect(page).selectOption('72') // меняем холст на лету — старый расчёт прерывается
+    const started = Date.now()
+    expect(await shownBytes(page, 'avif')).toBeGreaterThan(0)
+    expect(Date.now() - started).toBeLessThan(15_000) // не ждали окончания 4K-расчёта
+    expect(await size(canvasOf(page))).toEqual([168, 72])
+  })
+
+  test('the page stays responsive while AVIF of a 4K canvas is encoding', async ({ page }) => {
+    test.setTimeout(120_000)
+    await button(page, 'Информация').click()
+    await button(page, '21:9').click()
+    await qualitySelect(page).selectOption('2160')
+    await setBrush(page, 40)
+    await stroke(page, [200, 200], [4800, 1900])
+    // кодирование идёт в воркере: рисование и клики продолжают работать
+    await expect(sizeCell(page, 'avif')).toContainText('считаю')
+    const t0 = Date.now()
+    await button(page, 'Круг').click()
+    await expect(button(page, 'Круг')).toHaveClass(/active/)
+    expect(Date.now() - t0).toBeLessThan(3000)
+    expect(await shownBytes(page, 'avif')).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Цвета в каждом формате
+// ---------------------------------------------------------------------------------------------
+
+const colorsCell = (page: Page, id: string) => page.locator(`.export-sizes [data-format="${id}"] .colors`)
+const digits = (text: string | null) => Number((text ?? '').replace(/\D/g, ''))
+
+async function shownColors(page: Page, id: string) {
+  await expect(colorsCell(page, id)).toHaveAttribute('data-colors', /^\d+$/, { timeout: 30_000 })
+  return Number(await colorsCell(page, id).getAttribute('data-colors'))
+}
+
+/** Сколько цветов на холсте — из шапки колонки «Цветов (на холсте: N)». */
+async function canvasColors(page: Page) {
+  return digits(await page.locator('.export-sizes thead th').nth(2).locator('.muted').textContent())
+}
+
+const LOSSLESS = ['png', 'svg', 'json:rle', 'json:delta-rle']
+
+async function drawTwoColors(page: Page) {
+  await setBrush(page, 4)
+  await stroke(page, [20, 20], [200, 100]) // #e5484d
+  await colorInput(page).fill('#0091ff')
+  await stroke(page, [30, 120], [220, 30])
+}
+
+test.describe('colors per format', () => {
+  test('lossless formats keep exactly the canvas colors and say so', async ({ page }) => {
+    await drawTwoColors(page)
+    await button(page, 'Информация').click()
+    expect(await canvasColors(page)).toBe(2)
+    for (const id of LOSSLESS) {
+      expect(await shownColors(page, id), id).toBe(2)
+      await expect(colorsCell(page, id).locator('.delta')).toHaveText('как на холсте')
+      await expect(colorsCell(page, id).locator('.delta')).toHaveClass(/same/)
+    }
+  })
+
+  test('JPG adds colors (white background + compression shades) and shows the difference', async ({ page }) => {
+    await drawTwoColors(page)
+    await button(page, 'Информация').click()
+    const jpg = await shownColors(page, 'jpg')
+    expect(jpg).toBeGreaterThan(2 + 1) // как минимум: белый фон и оттенки сжатия
+    const badge = colorsCell(page, 'jpg').locator('.delta')
+    await expect(badge).toHaveClass(/changed/)
+    await expect(badge).toHaveText(/^\+/)
+    expect(digits(await badge.textContent())).toBe(jpg - 2)
+  })
+
+  test('WEBP and AVIF are decoded back and their colors are measured', async ({ page }) => {
+    await drawTwoColors(page)
+    await button(page, 'Информация').click()
+    for (const id of ['webp', 'avif']) {
+      expect(await shownColors(page, id), id).toBeGreaterThan(0)
+      await expect(colorsCell(page, id).locator('.delta')).toBeVisible() // «как на холсте» или ±N
+    }
+  })
+
+  test('empty canvas: no colors in lossless formats, JPG has one (the white background)', async ({ page }) => {
+    await button(page, 'Информация').click()
+    expect(await canvasColors(page)).toBe(0)
+    for (const id of LOSSLESS) expect(await shownColors(page, id), id).toBe(0)
+    expect(await shownColors(page, 'jpg')).toBe(1)
+    await expect(colorsCell(page, 'jpg').locator('.delta')).toHaveText('+1')
+  })
+
+  test('a many-color image: lossless formats still match the canvas exactly', async ({ page }) => {
+    const stripes: Rect[] = Array.from({ length: 16 }, (_, i) => [
+      i * 8, 0, 8, 64, `rgb(${i * 16}, ${255 - i * 16}, ${(i * 37) % 256})`,
+    ])
+    await importPng(page, await makePng(page, 128, 64, stripes))
+    await button(page, 'Информация').click()
+    expect(await canvasColors(page)).toBe(16)
+    for (const id of LOSSLESS) expect(await shownColors(page, id), id).toBe(16)
+    expect(await shownColors(page, 'jpg')).toBeGreaterThan(16)
+  })
+
+  test('colors update when a new color is drawn', async ({ page }) => {
+    await setBrush(page, 3)
+    await stroke(page, [10, 10], [100, 10])
+    await button(page, 'Информация').click()
+    expect(await shownColors(page, 'png')).toBe(1)
+    await colorInput(page).fill('#30a46c')
+    await stroke(page, [10, 40], [100, 40])
+    await expect.poll(() => shownColors(page, 'png'), { timeout: 30_000 }).toBe(2)
+    expect(await canvasColors(page)).toBe(2)
+  })
+
+  test('colors of a 4K canvas are measured too', async ({ page }) => {
+    test.setTimeout(150_000)
+    await button(page, 'Информация').click()
+    await button(page, '21:9').click()
+    await qualitySelect(page).selectOption('2160')
+    await setBrush(page, 40)
+    await stroke(page, [200, 200], [4800, 1900])
+    for (const id of SIZE_IDS) expect(await shownColors(page, id), id).toBeGreaterThanOrEqual(1)
+    for (const id of LOSSLESS) expect(await shownColors(page, id), id).toBe(1)
   })
 })

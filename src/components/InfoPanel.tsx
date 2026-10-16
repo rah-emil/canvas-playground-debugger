@@ -77,7 +77,7 @@ export function InfoPanel({ buffer, format, onFormatChange }: Props) {
         <dd>{stats.colors.length}</dd>
       </dl>
 
-      <ExportSizes buffer={buffer} />
+      <ExportSizes buffer={buffer} canvasColors={stats.colors.length} />
 
       <div className="tables">
         <div>

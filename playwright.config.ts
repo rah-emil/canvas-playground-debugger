@@ -6,7 +6,12 @@ const PORT = 5199
 export default defineConfig({
   testDir: 'e2e',
   fullyParallel: true,
-  reporter: 'list',
+  // В CI: запрет случайно оставленного test.only, один повтор на случай флака и HTML-отчёт для артефакта.
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  // У раннера 2 ядра: 4 воркера с тяжёлыми 4K-тестами только мешали бы друг другу.
+  workers: process.env.CI ? 2 : undefined,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
     // Системный Chrome: не нужно скачивать браузеры Playwright.

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { PixelBuffer } from '../canvas/pixels'
-import { SIZE_TARGETS } from '../canvas/sizes'
+import { SIZE_TARGETS, type Measurement } from '../canvas/sizes'
 
 export type SizeState =
   | { status: 'pending' }
-  | { status: 'done'; bytes: number }
+  | ({ status: 'done' } & Measurement)
   | { status: 'error'; message: string }
 
 const START_DELAY_MS = 150
@@ -24,13 +24,14 @@ export function useExportSizes(buffer: PixelBuffer): Record<string, SizeState> {
 
   useEffect(() => {
     let cancelled = false
+    const abort = new AbortController()
     const run = async () => {
       for (const target of SIZE_TARGETS) {
         await nextTask()
         if (cancelled) return
         let state: SizeState
         try {
-          state = { status: 'done', bytes: await target.measure(buffer) }
+          state = { status: 'done', ...(await target.measure(buffer, abort.signal)) }
         } catch (e) {
           state = { status: 'error', message: e instanceof Error ? e.message : String(e) }
         }
@@ -44,6 +45,7 @@ export function useExportSizes(buffer: PixelBuffer): Record<string, SizeState> {
     const timer = setTimeout(run, START_DELAY_MS)
     return () => {
       cancelled = true
+      abort.abort()
       clearTimeout(timer)
     }
   }, [buffer])
