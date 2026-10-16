@@ -240,7 +240,7 @@ test.describe('info panel', () => {
     await openInfo(page)
     const info = page.locator('.info')
     await expect(info).toBeVisible()
-    await expect(info).toContainText('256×144 (36 864 px)')
+    await expect(info).toContainText('256×144 (36,864 px)')
     await expect(info).toContainText('0 px (0.00%)')
     await expect(info).toContainText('The canvas is empty')
     await toggleBlock(page, INFO_TITLE).click()
@@ -294,7 +294,7 @@ test.describe('info panel', () => {
   test('shows new size after resolution change', async ({ page }) => {
     await openInfo(page)
     await button(page, '1:1').click()
-    await expect(page.locator('.info')).toContainText('144×144 (20 736 px)')
+    await expect(page.locator('.info')).toContainText('144×144 (20,736 px)')
   })
 
   test('downloads the full state as JSON runs', async ({ page }) => {
